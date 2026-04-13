@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 
-class AddViewScreen extends StatelessWidget {
-  const AddViewScreen({super.key});
+class LandmarksScreen extends StatelessWidget {
+  const LandmarksScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -10,7 +10,7 @@ class AddViewScreen extends StatelessWidget {
     return const Scaffold(
       body: Center(
         child: Text(
-          "this is the Add/View Screen",
+          "this is the Landmark Screen",
           style: TextStyle(fontSize: 25),
         ),
       ),
