@@ -1,0 +1,2 @@
+# MapTale
+Flask based application.
