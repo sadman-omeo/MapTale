@@ -68,4 +68,46 @@ class ApiService {
 
     throw Exception('Visit failed with status ${response.statusCode}');
   }
+
+  static Future<Map<String, dynamic>> createLandmark({
+    required String title,
+    required double lat,
+    required double lon,
+    required String imagePath,
+  }) async {
+    final uri = Uri.parse('$baseUrl?action=create_landmark&key=$studentKey');
+
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['title'] = title
+      ..fields['lat'] = lat.toString()
+      ..fields['lon'] = lon.toString()
+      ..files.add(await http.MultipartFile.fromPath('image', imagePath));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    final decoded =
+    response.body.isNotEmpty ? jsonDecode(response.body) : null;
+
+    if (response.statusCode == 200) {
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+
+      return {
+        'success': true,
+        'message': 'Landmark created successfully',
+        'raw': decoded,
+      };
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      throw Exception(
+        decoded['message']?.toString() ?? 'Create landmark failed',
+      );
+    }
+
+    throw Exception('Create landmark failed with status ${response.statusCode}');
+  }
+
 }
