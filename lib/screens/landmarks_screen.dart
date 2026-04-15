@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/landmarks_model.dart';
 import '../services/api_service.dart';
+import '../services/visit_history_service.dart';
+
 
 class LandmarksScreen extends StatefulWidget {
   const LandmarksScreen({super.key});
@@ -17,6 +19,16 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
 
   bool _sortHighToLow = true;
   double? _minScore;
+
+  String _getImageUrl(String imagePath) {
+    if (imagePath.isEmpty) return '';
+
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+
+    return 'https://labs.anontech.info/cse489/exm3/$imagePath';
+  }
 
   @override
   void initState() {
@@ -98,13 +110,19 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
         userLati: position.latitude,
         userLongi: position.longitude,
       );
+      final distance = result['distance'] ??
+        result['avg_distance'] ??
+        result['calculated distance'];
+
+      await VisitHistoryService.saveVisit(
+        landmarkTitle: landmark.title,
+        visitedAt: DateTime.now().toIso8601String(),
+        distance: distance,
+      );
 
       if (!mounted) return;
       Navigator.pop(context);
 
-      final distance = result['distance'] ??
-          result['avg_distance'] ??
-          result['calculated_distance'];
 
       final message =
           result['message']?.toString() ?? 'Visit request sent successfully';
@@ -231,7 +249,7 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
                   itemCount: landmarks.length,
                   itemBuilder: (context, index) {
                     final landmark = landmarks[index];
-
+                    print('Image from API: ${landmark.image}');
                     return Card(
                       margin: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -247,19 +265,13 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
                               children: [
                                 landmark.image.isNotEmpty
                                     ? Image.network(
-                                  landmark.image,
+                                  _getImageUrl(landmark.image),
                                   width: 60,
                                   height: 60,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (
-                                      context,
-                                      error,
-                                      stackTrace,
-                                      ) {
-                                    return const Icon(
-                                      Icons.broken_image,
-                                      size: 40,
-                                    );
+                                  errorBuilder: (context, error, stackTrace) {
+                                    print('Image load failed: ${_getImageUrl(landmark.image)}');
+                                    return const Icon(Icons.broken_image, size: 40);
                                   },
                                 )
                                     : const Icon(
