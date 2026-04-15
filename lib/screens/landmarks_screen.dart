@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/landmarks_model.dart';
 import '../services/api_service.dart';
 
@@ -14,7 +15,6 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
 
   final TextEditingController _minScoreController = TextEditingController();
 
-  List<Landmarks> _allLandmarks = [];
   bool _sortHighToLow = true;
   double? _minScore;
 
@@ -24,14 +24,14 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
     _landmarksFuture = ApiService.getLandmarks();
   }
 
-  List<Landmarks> _getProcessedLandmarks() {
-    List<Landmarks> filtered = List.from(_allLandmarks);
+  List<Landmarks> _processLandmarks(List<Landmarks> landmarks) {
+    List<Landmarks> result = List.from(landmarks);
 
     if (_minScore != null) {
-      filtered = filtered.where((l) => l.score >= _minScore!).toList();
+      result = result.where((item) => item.score >= _minScore!).toList();
     }
 
-    filtered.sort((a, b) {
+    result.sort((a, b) {
       if (_sortHighToLow) {
         return b.score.compareTo(a.score);
       } else {
@@ -39,7 +39,7 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
       }
     });
 
-    return filtered;
+    return result;
   }
 
   void _applyFilter() {
@@ -54,6 +54,86 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
       _minScoreController.clear();
       _minScore = null;
     });
+  }
+
+  Future<Position> _getCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Location service is turned off');
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      throw Exception('Location permission denied');
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Location permission permanently denied');
+    }
+
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
+  Future<void> _visitLandmark(Landmarks landmark) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final position = await _getCurrentLocation();
+
+      final result = await ApiService.visitLandmark(
+        landmarkId: landmark.id,
+        userLati: position.latitude,
+        userLongi: position.longitude,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      final distance = result['distance'] ??
+          result['avg_distance'] ??
+          result['calculated_distance'];
+
+      final message =
+          result['message']?.toString() ?? 'Visit request sent successfully';
+
+      final finalText = distance != null
+          ? '$message\nDistance: $distance'
+          : message;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(finalText)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Visit Failed'),
+          content: Text(e.toString()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   @override
@@ -73,7 +153,9 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
         future: _landmarksFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
           }
 
           if (snapshot.hasError) {
@@ -82,8 +164,8 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
             );
           }
 
-          _allLandmarks = snapshot.data ?? [];
-          final landmarks = _getProcessedLandmarks();
+          final allLandmarks = snapshot.data ?? [];
+          final landmarks = _processLandmarks(allLandmarks);
 
           return Column(
             children: [
@@ -142,7 +224,9 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
               ),
               Expanded(
                 child: landmarks.isEmpty
-                    ? const Center(child: Text('No landmarks found'))
+                    ? const Center(
+                  child: Text('No landmarks found'),
+                )
                     : ListView.builder(
                   itemCount: landmarks.length,
                   itemBuilder: (context, index) {
@@ -153,28 +237,67 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
                         horizontal: 12,
                         vertical: 8,
                       ),
-                      child: ListTile(
-                        leading: landmark.image.isNotEmpty
-                            ? Image.network(
-                          landmark.image,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          errorBuilder:
-                              (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.broken_image,
-                              size: 40,
-                            );
-                          },
-                        )
-                            : const Icon(
-                          Icons.image_not_supported,
-                          size: 40,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                              children: [
+                                landmark.image.isNotEmpty
+                                    ? Image.network(
+                                  landmark.image,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (
+                                      context,
+                                      error,
+                                      stackTrace,
+                                      ) {
+                                    return const Icon(
+                                      Icons.broken_image,
+                                      size: 40,
+                                    );
+                                  },
+                                )
+                                    : const Icon(
+                                  Icons.image_not_supported,
+                                  size: 40,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        landmark.title,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text('Score: ${landmark.score}'),
+                                      Text('ID: ${landmark.id}'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _visitLandmark(landmark),
+                                icon: const Icon(Icons.my_location),
+                                label: const Text('Visit'),
+                              ),
+                            ),
+                          ],
                         ),
-                        title: Text(landmark.title),
-                        subtitle: Text('Score: ${landmark.score}'),
-                        trailing: Text('ID: ${landmark.id}'),
                       ),
                     );
                   },

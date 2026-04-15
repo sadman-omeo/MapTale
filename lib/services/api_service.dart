@@ -29,4 +29,43 @@ class ApiService {
       throw Exception('Failed to load Landmarks!');
     }
   }
+
+  static Future<Map<String, dynamic>> visitLandmark({
+    required int landmarkId,
+    required double userLati,
+    required double userLongi,
+  }) async {
+    final uri = Uri.parse('$baseUrl?action=visit_landmark&key=$studentKey');
+
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'landmark_id': landmarkId,
+        'user_lat': userLati,
+        'user_lon': userLongi,
+      }),
+    );
+
+    final decoded =
+    response.body.isNotEmpty ? jsonDecode(response.body) : null;
+
+    if (response.statusCode == 200) {
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+
+      return {
+        'success': true,
+        'message': 'Visit successful',
+        'raw': decoded,
+      };
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      throw Exception(decoded['message']?.toString() ?? 'Visit failed');
+    }
+
+    throw Exception('Visit failed with status ${response.statusCode}');
+  }
 }
