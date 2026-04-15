@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/landmarks_model.dart';
 import '../services/api_service.dart';
+import '../services/visit_history_service.dart';
+
 
 class LandmarksScreen extends StatefulWidget {
   const LandmarksScreen({super.key});
@@ -98,13 +100,19 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
         userLati: position.latitude,
         userLongi: position.longitude,
       );
+      final distance = result['distance'] ??
+        result['avg_distance'] ??
+        result['calculated distance'];
+
+      await VisitHistoryService.saveVisit(
+        landmarkTitle: landmark.title,
+        visitedAt: DateTime.now().toIso8601String(),
+        distance: distance,
+      );
 
       if (!mounted) return;
       Navigator.pop(context);
 
-      final distance = result['distance'] ??
-          result['avg_distance'] ??
-          result['calculated_distance'];
 
       final message =
           result['message']?.toString() ?? 'Visit request sent successfully';
