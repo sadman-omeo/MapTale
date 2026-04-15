@@ -20,6 +20,16 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
   bool _sortHighToLow = true;
   double? _minScore;
 
+  String _getImageUrl(String imagePath) {
+    if (imagePath.isEmpty) return '';
+
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+
+    return 'https://labs.anontech.info/cse489/exm3/$imagePath';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -239,7 +249,7 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
                   itemCount: landmarks.length,
                   itemBuilder: (context, index) {
                     final landmark = landmarks[index];
-
+                    print('Image from API: ${landmark.image}');
                     return Card(
                       margin: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -255,19 +265,13 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
                               children: [
                                 landmark.image.isNotEmpty
                                     ? Image.network(
-                                  landmark.image,
+                                  _getImageUrl(landmark.image),
                                   width: 60,
                                   height: 60,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (
-                                      context,
-                                      error,
-                                      stackTrace,
-                                      ) {
-                                    return const Icon(
-                                      Icons.broken_image,
-                                      size: 40,
-                                    );
+                                  errorBuilder: (context, error, stackTrace) {
+                                    print('Image load failed: ${_getImageUrl(landmark.image)}');
+                                    return const Icon(Icons.broken_image, size: 40);
                                   },
                                 )
                                     : const Icon(
