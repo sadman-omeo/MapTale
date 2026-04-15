@@ -3,7 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import '../models/landmarks_model.dart';
 import '../services/api_service.dart';
 import '../services/visit_history_service.dart';
-
+import '../services/offline_service.dart';
 
 class LandmarksScreen extends StatefulWidget {
   const LandmarksScreen({super.key});
@@ -105,35 +105,47 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
     try {
       final position = await _getCurrentLocation();
 
-      final result = await ApiService.visitLandmark(
-        landmarkId: landmark.id,
-        userLati: position.latitude,
-        userLongi: position.longitude,
-      );
-      final distance = result['distance'] ??
-        result['avg_distance'] ??
-        result['calculated distance'];
+      try {
+        final result = await ApiService.visitLandmark(
+          landmarkId: landmark.id,
+          userLati: position.latitude,
+          userLongi: position.longitude,
+        );
 
-      await VisitHistoryService.saveVisit(
-        landmarkTitle: landmark.title,
-        visitedAt: DateTime.now().toIso8601String(),
-        distance: distance,
-      );
+        if (!mounted) return;
+        Navigator.pop(context);
 
-      if (!mounted) return;
-      Navigator.pop(context);
+        final distance = result['distance'] ??
+            result['avg_distance'] ??
+            result['calculated_distance'];
 
+        final message =
+            result['message']?.toString() ?? 'Visit request sent successfully';
 
-      final message =
-          result['message']?.toString() ?? 'Visit request sent successfully';
+        final finalText = distance != null
+            ? '$message\nDistance: $distance'
+            : message;
 
-      final finalText = distance != null
-          ? '$message\nDistance: $distance'
-          : message;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(finalText)),
+        );
+      } catch (e) {
+        await OfflineService.addPendingVisit(
+          landmarkId: landmark.id,
+          landmarkTitle: landmark.title,
+          userLat: position.latitude,
+          userLon: position.longitude,
+        );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(finalText)),
-      );
+        if (!mounted) return;
+        Navigator.pop(context);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No internet. Visit saved offline.'),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
