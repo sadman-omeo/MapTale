@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/landmarks_model.dart';
 import '../services/offline_service.dart';
+import '../services/offline_service.dart';
 
 
 class ApiService {

@@ -105,47 +105,35 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
     try {
       final position = await _getCurrentLocation();
 
-      try {
-        final result = await ApiService.visitLandmark(
-          landmarkId: landmark.id,
-          userLati: position.latitude,
-          userLongi: position.longitude,
-        );
+      final result = await ApiService.visitLandmark(
+        landmarkId: landmark.id,
+        userLati: position.latitude,
+        userLongi: position.longitude,
+      );
 
-        if (!mounted) return;
-        Navigator.pop(context);
+      final distance = result['distance'] ??
+          result['avg_distance'] ??
+          result['calculated_distance'];
 
-        final distance = result['distance'] ??
-            result['avg_distance'] ??
-            result['calculated_distance'];
+      await VisitHistoryService.saveVisit(
+        landmarkTitle: landmark.title,
+        visitedAt: DateTime.now().toIso8601String(),
+        distance: distance,
+      );
 
-        final message =
-            result['message']?.toString() ?? 'Visit request sent successfully';
+      if (!mounted) return;
+      Navigator.pop(context);
 
-        final finalText = distance != null
-            ? '$message\nDistance: $distance'
-            : message;
+      final message =
+          result['message']?.toString() ?? 'Visit request sent successfully';
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(finalText)),
-        );
-      } catch (e) {
-        await OfflineService.addPendingVisit(
-          landmarkId: landmark.id,
-          landmarkTitle: landmark.title,
-          userLat: position.latitude,
-          userLon: position.longitude,
-        );
+      final finalText = distance != null
+          ? '$message\nDistance: $distance'
+          : message;
 
-        if (!mounted) return;
-        Navigator.pop(context);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No internet. Visit saved offline.'),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(finalText)),
+      );
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
