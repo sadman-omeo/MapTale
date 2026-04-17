@@ -12,7 +12,6 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-
 class _MapScreenState extends State<MapScreen> {
   late Future<List<Landmarks>> _landmarksFuture;
 
@@ -22,19 +21,28 @@ class _MapScreenState extends State<MapScreen> {
     _landmarksFuture = ApiService.getLandmarks();
   }
 
+  Future<void> _refreshMap() async {
+    setState(() {
+      _landmarksFuture = ApiService.getLandmarks();
+    });
+
+    await _landmarksFuture;
+  }
+
   Color _getMarkerColor(double score, double minScore, double maxScore) {
     if (minScore == maxScore) return Colors.blue;
 
-    final normalize_score = (score - minScore) / (maxScore - minScore);
+    final normalizedScore = (score - minScore) / (maxScore - minScore);
 
-    if (normalize_score < 0.33) {
+    if (normalizedScore < 0.33) {
       return Colors.red;
-    } else if (normalize_score < 0.66) {
+    } else if (normalizedScore < 0.66) {
       return Colors.orange;
     } else {
       return Colors.green;
     }
   }
+
   void _showLandmarkDetails(Landmarks landmark) {
     showDialog(
       context: context,
@@ -62,14 +70,21 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('MAP'),
-          centerTitle: true,
-        ),
+      appBar: AppBar(
+        title: const Text('MAP'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await _refreshMap();
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: FutureBuilder<List<Landmarks>>(
         future: _landmarksFuture,
         builder: (context, snapshot) {
@@ -88,8 +103,21 @@ class _MapScreenState extends State<MapScreen> {
           final landmarks = snapshot.data ?? [];
 
           if (landmarks.isEmpty) {
-            return const Center(
-              child: Text('No landmarks found'),
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('No landmarks found'),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await _refreshMap();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh'),
+                  ),
+                ],
+              ),
             );
           }
 
@@ -135,5 +163,3 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 }
-
-

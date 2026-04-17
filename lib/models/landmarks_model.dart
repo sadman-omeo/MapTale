@@ -35,5 +35,16 @@ class Landmarks {
           : double.tryParse(json['avg_distance'].toString()),
     );
   }
-
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'lat': lati,
+      'lon': longi,
+      'image': image,
+      'score': score,
+      'visit_count': visit_count,
+      'avg_distance': avg_distance,
+    };
+  }
 }
