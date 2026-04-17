@@ -1,0 +1,27 @@
+AI Usage Statement
+
+I used AI as a support tool during the development of this project.
+
+How AI was used:
+1. To understand the lab exam requirements and break the project into smaller development steps
+2. To get guidance on Flutter screen structure, API integration flow, and debugging issues
+3. To get help writing and improving small code segments such as:
+   - API service methods
+   - Visit feature logic
+   - Local caching logic
+   - Offline pending visit sync logic
+   - UI adjustments and error handling
+4. To prepare README and documentation text
+
+How AI was not used:
+1. I did not copy a full project and submit it directly
+2. I manually integrated, tested, and modified the generated suggestions
+3. I verified functionality by running the app, testing API calls, checking GPS access, testing offline behavior, and fixing errors during implementation
+
+My contribution:
+1. I created and organized the project in Android Studio using Flutter
+2. I implemented and tested the app step by step
+3. I adjusted variable names, screen flow, UI behavior, and logic according to the exam requirements
+4. I tested landmark loading, visit requests, activity history, add landmark, map view, offline cache, offline queue, and sync behavior manually
+
+I used AI as a learning and development assistant, but I reviewed, integrated, and tested the final project myself.
