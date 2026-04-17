@@ -20,6 +20,13 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
   bool _sortHighToLow = true;
   double? _minScore;
 
+  @override
+  void initState() {
+    super.initState();
+    _landmarksFuture = ApiService.getLandmarks();
+    _syncPendingVisits();
+  }
+
   String _getImageUrl(String imagePath) {
     if (imagePath.isEmpty) return '';
 
@@ -30,10 +37,14 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
     return 'https://labs.anontech.info/cse489/exm3/$imagePath';
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _landmarksFuture = ApiService.getLandmarks();
+  Future<void> _refreshLandmarks() async {
+    await _syncPendingVisits();
+
+    setState(() {
+      _landmarksFuture = ApiService.getLandmarks();
+    });
+
+    await _landmarksFuture;
   }
 
   List<Landmarks> _processLandmarks(List<Landmarks> landmarks) {
@@ -105,35 +116,53 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
     try {
       final position = await _getCurrentLocation();
 
-      final result = await ApiService.visitLandmark(
-        landmarkId: landmark.id,
-        userLati: position.latitude,
-        userLongi: position.longitude,
-      );
+      try {
+        final result = await ApiService.visitLandmark(
+          landmarkId: landmark.id,
+          userLati: position.latitude,
+          userLongi: position.longitude,
+        );
 
-      final distance = result['distance'] ??
-          result['avg_distance'] ??
-          result['calculated_distance'];
+        final distance = result['distance'] ??
+            result['avg_distance'] ??
+            result['calculated_distance'];
 
-      await VisitHistoryService.saveVisit(
-        landmarkTitle: landmark.title,
-        visitedAt: DateTime.now().toIso8601String(),
-        distance: distance,
-      );
+        await VisitHistoryService.saveVisit(
+          landmarkTitle: landmark.title,
+          visitedAt: DateTime.now().toIso8601String(),
+          distance: distance,
+        );
 
-      if (!mounted) return;
-      Navigator.pop(context);
+        if (!mounted) return;
+        Navigator.pop(context);
 
-      final message =
-          result['message']?.toString() ?? 'Visit request sent successfully';
+        final message =
+            result['message']?.toString() ?? 'Visit request sent successfully';
 
-      final finalText = distance != null
-          ? '$message\nDistance: $distance'
-          : message;
+        final finalText = distance != null
+            ? '$message\nDistance: $distance'
+            : message;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(finalText)),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(finalText)),
+        );
+      } catch (e) {
+        await OfflineService.addPendingVisit(
+          landmarkId: landmark.id,
+          landmarkTitle: landmark.title,
+          userLat: position.latitude,
+          userLon: position.longitude,
+        );
+
+        if (!mounted) return;
+        Navigator.pop(context);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No internet. Visit saved offline.'),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
@@ -154,6 +183,53 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
     }
   }
 
+  Future<void> _syncPendingVisits() async {
+    final pendingVisits = await OfflineService.getPendingVisits();
+
+    if (pendingVisits.isEmpty) return;
+
+    int syncedCount = 0;
+
+    for (final visit in pendingVisits) {
+      try {
+        final result = await ApiService.visitLandmark(
+          landmarkId: int.tryParse(visit['landmarkId'].toString()) ?? 0,
+          userLati: double.tryParse(visit['userLat'].toString()) ?? 0.0,
+          userLongi: double.tryParse(visit['userLon'].toString()) ?? 0.0,
+        );
+
+        final distance = result['distance'] ??
+            result['avg_distance'] ??
+            result['calculated_distance'];
+
+        await VisitHistoryService.saveVisit(
+          landmarkTitle: visit['landmarkTitle']?.toString() ?? 'Unknown',
+          visitedAt: visit['createdAt']?.toString() ??
+              DateTime.now().toIso8601String(),
+          distance: distance,
+        );
+
+        await OfflineService.removePendingVisit(
+          visit['id']?.toString() ?? '',
+        );
+
+        syncedCount++;
+      } catch (e) {
+        // Keep failed syncs in pending storage
+      }
+    }
+
+    if (!mounted) return;
+
+    if (syncedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$syncedCount offline visit(s) synced successfully'),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _minScoreController.dispose();
@@ -166,6 +242,14 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
       appBar: AppBar(
         title: const Text('Landmarks'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await _refreshLandmarks();
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
       body: FutureBuilder<List<Landmarks>>(
         future: _landmarksFuture,
@@ -242,77 +326,96 @@ class _LandmarksScreenState extends State<LandmarksScreen> {
               ),
               Expanded(
                 child: landmarks.isEmpty
-                    ? const Center(
-                  child: Text('No landmarks found'),
+                    ? RefreshIndicator(
+                  onRefresh: _refreshLandmarks,
+                  child: ListView(
+                    children: const [
+                      SizedBox(height: 250),
+                      Center(
+                        child: Text('No landmarks found'),
+                      ),
+                    ],
+                  ),
                 )
-                    : ListView.builder(
-                  itemCount: landmarks.length,
-                  itemBuilder: (context, index) {
-                    final landmark = landmarks[index];
-                    print('Image from API: ${landmark.image}');
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          children: [
-                            Row(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                              children: [
-                                landmark.image.isNotEmpty
-                                    ? Image.network(
-                                  _getImageUrl(landmark.image),
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    print('Image load failed: ${_getImageUrl(landmark.image)}');
-                                    return const Icon(Icons.broken_image, size: 40);
-                                  },
-                                )
-                                    : const Icon(
-                                  Icons.image_not_supported,
-                                  size: 40,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        landmark.title,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text('Score: ${landmark.score}'),
-                                      Text('ID: ${landmark.id}'),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: ElevatedButton.icon(
-                                onPressed: () => _visitLandmark(landmark),
-                                icon: const Icon(Icons.my_location),
-                                label: const Text('Visit'),
-                              ),
-                            ),
-                          ],
+                    : RefreshIndicator(
+                  onRefresh: _refreshLandmarks,
+                  child: ListView.builder(
+                    itemCount: landmarks.length,
+                    itemBuilder: (context, index) {
+                      final landmark = landmarks[index];
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
                         ),
-                      ),
-                    );
-                  },
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              Row(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                                children: [
+                                  landmark.image.isNotEmpty
+                                      ? Image.network(
+                                    _getImageUrl(landmark.image),
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (
+                                        context,
+                                        error,
+                                        stackTrace,
+                                        ) {
+                                      return const Icon(
+                                        Icons.broken_image,
+                                        size: 40,
+                                      );
+                                    },
+                                  )
+                                      : const Icon(
+                                    Icons.image_not_supported,
+                                    size: 40,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          landmark.title,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                            'Score: ${landmark.score}'),
+                                        Text('ID: ${landmark.id}'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: ElevatedButton.icon(
+                                  onPressed: () =>
+                                      _visitLandmark(landmark),
+                                  icon: const Icon(Icons.my_location),
+                                  label: const Text('Visit'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
